@@ -11,6 +11,7 @@
 -  В папке `models` хранятся сохраненные модели
 
 -  Так выглядит папка с репозиторием
+  
         v Project
         | v data
         | | sample_submission.csv
