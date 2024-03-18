@@ -1,0 +1,55 @@
+2024-03-18 11:55:47 [INFO] Message: Logger initialized successfully!
+2024-03-18 11:55:47 [INFO] Message: Files csv load: SUCCESS
+2024-03-18 11:55:47 [INFO] Message: Missed data count
+PassengerId       0
+HomePlanet      201
+CryoSleep       217
+Cabin           199
+Destination     182
+Age             179
+VIP             203
+RoomService     181
+FoodCourt       183
+ShoppingMall    208
+Spa             183
+VRDeck          188
+Name            200
+dtype: int64
+2024-03-18 11:55:47 [INFO] Message: Splited feature PassengerId to ['GroupId', 'IdWithinGroup'] in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: Splited feature Cabin to ['Deck', 'Num', 'Side'] in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: Droped features ['Name', 'PassengerId', 'Cabin', 'VIP', 'Num'] in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: Changed type of GroupId to float in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed cryo sleep data in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed home planet by deck data in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed deck data by home planet in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed median age by home planet in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed median usage of service by age in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed median data in numerical columns in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: We inputed most frequent data in categorical columns in dataframe X_train
+2024-03-18 11:55:47 [INFO] Message: Missed data count
+HomePlanet       0
+CryoSleep        0
+Destination      0
+Age              0
+RoomService      0
+FoodCourt        0
+ShoppingMall     0
+Spa              0
+VRDeck           0
+GroupId          0
+IdWithinGroup    0
+Deck             0
+Side             0
+dtype: int64
+2024-03-18 11:55:47 [INFO] Message: Data type changed to dummies type
+2024-03-18 11:55:47 [INFO] Message: Start finding best parameters for model...
+2024-03-18 11:55:47 [INFO] Message: Studies step #1
+2024-03-18 12:06:17 [INFO] Message: Best value = 0.8201471941122355
+2024-03-18 12:06:17 [INFO] Message: Best parameters
+2024-03-18 12:06:17 [INFO] Message: objective: Logloss
+2024-03-18 12:06:17 [INFO] Message: colsample_bylevel: 0.0871271390679587
+2024-03-18 12:06:17 [INFO] Message: depth: 12
+2024-03-18 12:06:17 [INFO] Message: boosting_type: Ordered
+2024-03-18 12:06:17 [INFO] Message: bootstrap_type: Bernoulli
+2024-03-18 12:06:17 [INFO] Message: Fitting model with best parameters...
+2024-03-18 12:06:17 [INFO] Message: Fitting model with best parameters... Done!
