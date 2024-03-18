@@ -11,11 +11,13 @@ optuna.logging.disable_default_handler()
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from loguru import logger
+import random
+import argparse
 
 # Инициализация логгера
 logger.remove()
 from pathlib import Path
-log_file = Path("log/report_creating.log")
+log_file = Path("log/model_building.log")
 log_file.unlink(missing_ok=True)
 log_format = {
     "format": "{time:YYYY-MM-DD HH:mm:ss} [{level}] Message: {message}",
@@ -33,23 +35,11 @@ logger.add(
 logger.info("Logger initialized successfully!")
 
 # мой рандомный сид
-my_seed = 531746
+my_seed = random.randint(10, 25000)
 np.random.seed(my_seed)
 
-# подгрузка файлов
-try:
-    train, X_test = pd.read_csv('data/train.csv'), pd.read_csv('data/test.csv')  
-    X_train, y_train = train.iloc[:, :-1], train.iloc[:, -1:]
-    y_train = y_train.astype(bool).astype(int)
-    logger.info(f'Files csv load: SUCCESS')
-except Exception as e:
-    logger.error(e)
-    raise Exception("Files csv load: FAIL")
 
-X_train.name = 'X_train'
-X_test.name = 'X_test'
 
-logger.info(f'Missed data count\n{X_train.isnull().sum()}')
 
 
 # разделение фичи на несколько
@@ -134,6 +124,16 @@ def impute_home_planet_by_deck(df):
 
 def impute_deck_by_home_planet(df):
     """Вставляем данные в столбик Deck по соответствию с HomePlanet"""
+    home_planet_deck = df.groupby(['HomePlanet', 'Deck']).size().unstack().fillna(0)
+    earth = home_planet_deck.loc['Earth']
+    earth_proba = list(earth / sum(earth))
+    europa = home_planet_deck.loc['Europa']
+    europa_proba = list(europa / sum(europa))
+    mars = home_planet_deck.loc['Mars']
+    mars_proba = list(mars / sum(mars))
+    decks = df['Deck'].unique()
+    deck_values = sorted(decks[~pd.isnull(decks)])
+    planet_proba = dict(zip(['Earth', 'Mars', 'Europa'], [earth_proba, mars_proba, europa_proba]))
     try:
         for planet in planet_proba.keys():
             planet_null_decks_shape = df.loc[(df['HomePlanet'] == planet) & (df['Deck'].isnull()), 'Deck'].shape[0]
@@ -173,6 +173,7 @@ def impute_usluga_by_age(df):
     
 def input_median_data_in_numerical_columns(df):
     """Вставляем средние данные в столбики с числовыми значениями"""
+    numerical_columns = df.describe().columns
     try:
         for col in numerical_columns:
             si = SimpleImputer(strategy='median')
@@ -185,6 +186,8 @@ def input_median_data_in_numerical_columns(df):
 
 def input_most_frequent_data_in_categorical_columns(df):
     """Вставляем средние данные в столбики с категориальными значениями"""
+    numerical_columns = df.describe().columns
+    categorical_columns = set(df.columns) - set(numerical_columns)
     try:
         for col in categorical_columns:
             si = SimpleImputer(strategy='most_frequent')
@@ -195,143 +198,163 @@ def input_most_frequent_data_in_categorical_columns(df):
         logger.error(e)
         raise Exception(f"Failed input most frequent data in categorical columns in dataframe {df.name}")
 
-def objective(trial):
-    """Функция подбора оптимальных параметров модели"""
-    _X_train, X_valid, _y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25)
-    params = {
-        'objective': trial.suggest_categorical('objective', ['Logloss', 'CrossEntropy']),
-        'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.01, 0.1, log=True),
-        'depth': trial.suggest_int('depth', 1, 12),
-        'boosting_type': trial.suggest_categorical('boosting_type',['Ordered', 'Plain']),
-        'bootstrap_type': trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS']),
-        'used_ram_limit': '8gb',
-        'eval_metric': 'Accuracy',
-        'logging_level': 'Silent',
-        'random_seed': 21
-    }
-    if params['bootstrap_type'] == 'Bayesian':
-        params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0, 10)
-    clf = CatBoostClassifier(**params)
-    pruning_callback = CatBoostPruningCallback(trial, 'Accuracy')
-    clf.fit(_X_train, _y_train, eval_set=[(X_valid, y_valid)], verbose=False, early_stopping_rounds=100, callbacks=[pruning_callback],)
-    pruning_callback.check_pruned()
-    predictions = clf.predict(X_valid)
-    prediction_labels = np.rint(predictions)
-    accuracy = accuracy_score(y_valid, prediction_labels)
-    return accuracy
-
-X_test = split_feature(X_test, 'PassengerId', ['GroupId', 'IdWithinGroup'], '_')
-X_train = split_feature(X_train, 'PassengerId', ['GroupId', 'IdWithinGroup'], '_')
-
-X_test = split_feature(X_test, 'Cabin', ['Deck', 'Num', 'Side'], '/')
-X_train = split_feature(X_train, 'Cabin', ['Deck', 'Num', 'Side'], '/')
-
-X_test = drop_features(X_test, ['Name', 'PassengerId', 'Cabin', 'VIP', 'Num'])
-X_train = drop_features(X_train, ['Name', 'PassengerId', 'Cabin', 'VIP', 'Num'])
-
-X_test = cast_feature(X_test, 'GroupId', 'float')
-X_train = cast_feature(X_train, 'GroupId', 'float')
-
-X_train = impute_cryo_sleep(X_train)
-X_test = impute_cryo_sleep(X_test)
-
-X_train = impute_home_planet_by_deck(X_train)
-X_test = impute_home_planet_by_deck(X_test)
-
-home_planet_deck = X_train.groupby(['HomePlanet', 'Deck']).size().unstack().fillna(0)
-
-earth = home_planet_deck.loc['Earth']
-earth_proba = list(earth / sum(earth))
-
-europa = home_planet_deck.loc['Europa']
-europa_proba = list(europa / sum(europa))
-
-mars = home_planet_deck.loc['Mars']
-mars_proba = list(mars / sum(mars))
-
-decks = X_train['Deck'].unique()
-deck_values = sorted(decks[~pd.isnull(decks)])
-planet_proba = dict(zip(['Earth', 'Mars', 'Europa'], [earth_proba, mars_proba, europa_proba]))
-        
-X_train = impute_deck_by_home_planet(X_train)
-X_test = impute_deck_by_home_planet(X_test)
-
-X_train = impute_age_by_planet(X_train)
-X_test = impute_age_by_planet(X_test)
-
-X_train = impute_usluga_by_age(X_train)
-X_test = impute_usluga_by_age(X_test)
-
-numerical_columns = X_train.describe().columns
-categorical_columns = set(X_train.columns) - set(numerical_columns)
-
-X_train = input_median_data_in_numerical_columns(X_train)
-X_test = input_median_data_in_numerical_columns(X_test)
-
-X_train = input_most_frequent_data_in_categorical_columns(X_train)
-
-logger.info(f'Missed data count\n{X_train.isnull().sum()}')
-
 def log_transform_data(df):
+    numerical_columns = df.describe().columns
     for col in numerical_columns[1:-1]:
         df[col] = np.log(1 + df[col])
     return df
-X_train = log_transform_data(X_train)
-X_test = log_transform_data(X_test)
-
-try:
-    X_train = pd.get_dummies(X_train)
-    X_test = pd.get_dummies(X_test)
-    logger.info(f'Data type changed to dummies type')
-except Exception as e:
-    logger.error(e)
-    raise Exception(f"Failed change data type to dummies type")
 
 
+class My_Classifier_Model:
+    def __init__(self, results_dir="./data/results.csv", model_dir="./model/"):
+        self.model = None
+        self.results_dir = results_dir
+        self.model_dir = model_dir
 
-best_trials = pd.DataFrame(columns=[
-        'objective',
-        'colsample_bylevel',
-        'depth',
-        'boosting_type',
-        'bootstrap_type',
-        'best_value'
-    ]
-)
+    def train(self, dataset_filename):
+        # подгрузка файлов
+        try:
+            train = pd.read_csv(f'{dataset_filename}')
+            X_train, y_train = train.iloc[:, :-1], train.iloc[:, -1:]
+            y_train = y_train.astype(bool).astype(int)
+            logger.info(f'Files csv load: SUCCESS')
+        except Exception as e:
+            logger.error(e)
+            raise Exception("Files csv load: FAIL")
+        X_train.name = 'X_train'
+        logger.info(f'Missed data count\n{X_train.isnull().sum()}')
+        X_train = split_feature(X_train, 'PassengerId', ['GroupId', 'IdWithinGroup'], '_')
+        X_train = split_feature(X_train, 'Cabin', ['Deck', 'Num', 'Side'], '/')
+        X_train = drop_features(X_train, ['Name', 'PassengerId', 'Cabin', 'VIP', 'Num'])
+        X_train = cast_feature(X_train, 'GroupId', 'float')
+        X_train = impute_cryo_sleep(X_train)
+        X_train = impute_home_planet_by_deck(X_train)      
+        X_train = impute_deck_by_home_planet(X_train)
+        X_train = impute_age_by_planet(X_train)
+        X_train = impute_usluga_by_age(X_train)
+        X_train = input_median_data_in_numerical_columns(X_train)
+        X_train = input_most_frequent_data_in_categorical_columns(X_train)
+        logger.info(f'Missed data count\n{X_train.isnull().sum()}')
+        X_train = log_transform_data(X_train)
+        try:
+            X_train = pd.get_dummies(X_train)
+            logger.info(f'Data type changed to dummies type')
+        except Exception as e:
+            logger.error(e)
+            raise Exception(f"Failed change data type to dummies type")
 
-studies = 5
-trials = 100
-best_accuracy = 0.0
-logger.info(f'Start finding best parameters for model...')
-for n in range(studies):
-    logger.info(f'Studies step #{n+1}')
-    study = optuna.create_study(pruner=optuna.pruners.MedianPruner(n_warmup_steps=5), direction='maximize')
-    study.optimize(objective, n_trials=trials, timeout=600)
-    if study.best_value > best_accuracy:
-        logger.info(f'Best value = {study.best_value}')
-        trial = study.best_trial
-        logger.info(f'Best parameters')
-        for k, v in trial.params.items():
-            logger.info(f'{k}: {v}')
-        best_trials.loc[n] = study.best_trial.params
-        best_trials['best_value'].loc[n] = study.best_value
-        best_accuracy = study.best_value
-    else:
-        logger.info(f'Accuracy lower than prev study step')
+        def objective(trial):
+            """Функция подбора оптимальных параметров модели"""
+            _X_train, X_valid, _y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25)
+            params = {
+                'objective': trial.suggest_categorical('objective', ['Logloss', 'CrossEntropy']),
+                'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.01, 0.1, log=True),
+                'depth': trial.suggest_int('depth', 1, 12),
+                'boosting_type': trial.suggest_categorical('boosting_type',['Ordered', 'Plain']),
+                'bootstrap_type': trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS']),
+                'used_ram_limit': '8gb',
+                'eval_metric': 'Accuracy',
+                'logging_level': 'Silent',
+                'random_seed': 21
+            }
+            if params['bootstrap_type'] == 'Bayesian':
+                params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0, 10)
+            clf = CatBoostClassifier(**params)
+            pruning_callback = CatBoostPruningCallback(trial, 'Accuracy')
+            clf.fit(_X_train, _y_train, eval_set=[(X_valid, y_valid)], verbose=False, early_stopping_rounds=100, callbacks=[pruning_callback],)
+            pruning_callback.check_pruned()
+            predictions = clf.predict(X_valid)
+            prediction_labels = np.rint(predictions)
+            accuracy = accuracy_score(y_valid, prediction_labels)
+            return accuracy
+        best_trials = pd.DataFrame(columns=[
+                'objective',
+                'colsample_bylevel',
+                'depth',
+                'boosting_type',
+                'bootstrap_type',
+                'best_value'
+            ]
+        )
+        studies = 1
+        trials = 100
+        best_accuracy = 0.0
+        logger.info(f'Start finding best parameters for model...')
+        for n in range(studies):
+            logger.info(f'Studies step #{n+1}')
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(n_warmup_steps=5), direction='maximize')
+            study.optimize(objective, n_trials=trials, timeout=600)
+            if study.best_value > best_accuracy:
+                logger.info(f'Best value = {study.best_value}')
+                trial = study.best_trial
+                logger.info(f'Best parameters')
+                for k, v in trial.params.items():
+                    logger.info(f'{k}: {v}')
+                best_trials.loc[n] = study.best_trial.params
+                best_trials['best_value'].loc[n] = study.best_value
+                best_accuracy = study.best_value
+            else:
+                logger.info(f'Accuracy lower than prev study step')
 
-logger.info(f'Fitting model with best parameters...')
-best_trial = best_trials.sort_values('best_value', ascending=False).loc[0]
-clf = CatBoostClassifier(**best_trial[:-1], logging_level='Silent', random_seed=my_seed)
-try:
-    clf.fit(X_train, y_train.astype(int))
-    predicted = clf.predict(X_test)
-    logger.info(f'Fitting model with best parameters... Done!')
-except:
-    logger.warning(f'Error while fitting model...')
+        logger.info(f'Fitting model with best parameters...')
+        best_trial = best_trials.sort_values('best_value', ascending=False).loc[0]
+        clf = CatBoostClassifier(**best_trial[:-1], logging_level='Silent', random_seed=my_seed)
+        logger.info(f'Fitting model with best parameters... Done!')
+        clf.fit(X_train, y_train.astype(int))
+        clf.save_model(f'models/catboost_model.bin')
 
-logger.info(f'Make predictions...')
-sub = pd.DataFrame()
-sub['PassengerId'] = pd.read_csv('data/test.csv')['PassengerId']
-sub['Transported'] = pd.Series(predicted).astype(bool)
-sub.to_csv('submission.csv', index=False)
-logger.info(f'Make predictions... Done! Saved to submission.csv')
+    def predict(self, dataset_filename):
+        clf = CatBoostClassifier()
+        clf.load_model(f'models/catboost_model.bin')
+        X_test = pd.read_csv(f'{dataset_filename}')
+        X_test.name = 'X_test'
+        X_test = split_feature(X_test, 'PassengerId', ['GroupId', 'IdWithinGroup'], '_')
+        X_test = split_feature(X_test, 'Cabin', ['Deck', 'Num', 'Side'], '/')
+        X_test = drop_features(X_test, ['Name', 'PassengerId', 'Cabin', 'VIP', 'Num'])
+        X_test = cast_feature(X_test, 'GroupId', 'float')
+        X_test = impute_cryo_sleep(X_test)
+        X_test = impute_home_planet_by_deck(X_test)
+        X_test = impute_deck_by_home_planet(X_test)
+        X_test = impute_age_by_planet(X_test)
+        X_test = impute_usluga_by_age(X_test)
+        X_test = input_median_data_in_numerical_columns(X_test)
+        X_test = log_transform_data(X_test)
+        try:
+            X_test = pd.get_dummies(X_test)
+            logger.info(f'Data type changed to dummies type')
+        except Exception as e:
+            logger.error(e)
+            raise Exception(f"Failed change data type to dummies type")
+        logger.info(f'Make predictions...')
+        try:
+            predicted = clf.predict(X_test)
+            logger.info(f'Make predictions... Done!')
+        except:
+            logger.warning(f'Error while making predictions...')
+        sub = pd.DataFrame()
+        sub['PassengerId'] = pd.read_csv('data/test.csv')['PassengerId']
+        sub['Transported'] = pd.Series(predicted).astype(bool)
+        sub.to_csv('submission.csv', index=False)
+        logger.info(f'Make predictions... Done! Saved to submission.csv')
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train and predict using My_Classifier_Model")
+    parser.add_argument("mode", choices=["train", "predict"], help="Mode: train or predict")
+    parser.add_argument("dataset", help="Path to the dataset file")
+    parser.add_argument("--results-dir", default="./data/results.csv", help="Directory to save results (default: ./data/results.csv)")
+    parser.add_argument("--model-dir", default="./model/", help="Directory to save trained model (default: ./model/)")
+    args = parser.parse_args()
+
+    classifier = My_Classifier_Model(results_dir=args.results_dir, model_dir=args.model_dir)
+
+    if args.mode == "train":
+        classifier.train(args.dataset)
+    elif args.mode == "predict":
+        classifier.predict(args.dataset)
+
+if __name__ == "__main__":
+    main()
+
+# For train: model.py train 'data/train.csv'
+# For predict: model.py predict 'data/test.csv'
