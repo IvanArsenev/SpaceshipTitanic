@@ -14,14 +14,17 @@
   
         v Project
         | v data
-        | | sample_submission.csv
-        | | submission.csv
         | | test.csv
         | | train.csv
         | v models
-        | | model_accuracy_0_97.h5
-        | | model_accuracy_0_97.keras
+        | | catboost_model.bin
         | v notebooks
-        | | fin_passed_version.ipynb
-        | | first_try_with_keras.ipynb
-        | | try_to_get_more_value.ipynb
+        | | model.ipynb
+        | v log
+        | | model_building.log
+        | model.py
+        | requires.whl
+
+- Для запуска скрипта можено использовать команды:
+- Для обучения: model.py train 'data/train.csv'
+- Для предсказаний: model.py predict 'data/test.csv'
